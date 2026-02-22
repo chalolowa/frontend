@@ -1,0 +1,130 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { ArrowLeft, Save } from 'lucide-react'
+import Link from 'next/link'
+
+export default function AddPropertyPage() {
+    const router = useRouter()
+    const [isLoading, setIsLoading] = useState(false)
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsLoading(true)
+
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 1500))
+
+        toast.success('Property added successfully!', {
+            description: 'You can now add tenants to this property.'
+        })
+
+        setIsLoading(false)
+        router.push('/dashboard/properties')
+    }
+
+    return (
+        <div className="max-w-2xl mx-auto">
+            <div className="mb-6">
+                <Link
+                    href="/dashboard/properties"
+                    className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700"
+                >
+                    <ArrowLeft className="h-4 w-4 mr-1" />
+                    Back to Properties
+                </Link>
+            </div>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Add New Property</CardTitle>
+                    <CardDescription>
+                        Enter the details of your property to start managing it.
+                    </CardDescription>
+                </CardHeader>
+                <form onSubmit={handleSubmit}>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Property Name</Label>
+                            <Input
+                                id="name"
+                                placeholder="e.g., Sunset Apartments"
+                                required
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="address">Address</Label>
+                            <Input
+                                id="address"
+                                placeholder="Street address, city, country"
+                                required
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="units">Total Units</Label>
+                                <Input
+                                    id="units"
+                                    type="number"
+                                    min="1"
+                                    placeholder="5"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="rent">Monthly Rent ($)</Label>
+                                <Input
+                                    id="rent"
+                                    type="number"
+                                    min="0"
+                                    step="100"
+                                    placeholder="1500"
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="description">Description (Optional)</Label>
+                            <Input
+                                id="description"
+                                placeholder="Any additional details about the property"
+                            />
+                        </div>
+                    </CardContent>
+
+                    <CardFooter className="flex justify-end gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => router.back()}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={isLoading}>
+                            {isLoading ? (
+                                <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                    Saving...
+                                </div>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-2" />
+                                    Save Property
+                                </>
+                            )}
+                        </Button>
+                    </CardFooter>
+                </form>
+            </Card>
+        </div>
+    )
+}
