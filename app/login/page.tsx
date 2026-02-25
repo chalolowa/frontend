@@ -4,12 +4,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Home, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react'
+import { Home, Mail, Lock, Eye, EyeOff, ArrowRight, Chrome } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
+import { auth, googleProvider } from '@/lib/firebase'
+import { api } from '@/lib/api'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import type { Landlord } from '@/types/landlord'
 
 export default function LoginPage() {
     const router = useRouter()
@@ -18,26 +24,122 @@ export default function LoginPage() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault()
-        setIsLoading(true)
 
-        // Simulate login
-        await new Promise(resolve => setTimeout(resolve, 1500))
-
-        // For demo purposes, accept any credentials
-        if (email && password) {
-            toast.success('Login successful!')
-            router.push('/dashboard')
-        } else {
+        if (!email || !password) {
             toast.error('Please enter email and password')
+            return
         }
 
-        setIsLoading(false)
+        setIsLoading(true)
+
+        try {
+            // Sign in with Firebase
+            const userCredential = await signInWithEmailAndPassword(auth, email, password)
+            const user = userCredential.user
+
+            // Get Firebase token
+            const token = await user.getIdToken()
+
+            // Get user data from Firestore
+            const userDoc = await getDoc(doc(db, 'landlords', user.uid))
+
+            if (!userDoc.exists()) {
+                toast.error('User profile not found')
+                return
+            }
+
+            const userData = userDoc.data()
+
+            // Store auth data
+            localStorage.setItem('authToken', token)
+            localStorage.setItem('landlordId', userData.landlordId?.toString() || user.uid)
+            localStorage.setItem('user', JSON.stringify(userData))
+
+            toast.success('Login successful!')
+
+            // Verify backend connection
+            try {
+                await api.get('/landlords/dashboard/stats')
+            } catch (error) {
+                console.warn('Backend not reachable, but continuing with local auth');
+                console.error(error);
+            }
+
+            router.push('/dashboard')
+
+        } catch (error: unknown) {
+            console.error('Login error:', error)
+            toast.error("Invalid email/password")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleGoogleLogin = async () => {
+        setIsLoading(true)
+
+        try {
+            // Sign in with Google
+            const result = await signInWithPopup(auth, googleProvider)
+            const user = result.user
+
+            // Get Firebase token
+            const token = await user.getIdToken()
+
+            // Check if user exists in Firestore
+            const userDoc = await getDoc(doc(db, 'landlords', user.uid))
+
+            const landlordId = user.uid
+            let userData: Landlord | Record<string, unknown> = {}
+
+            if (!userDoc.exists()) {
+                // Create new landlord in Firestore
+                const newLandlord: Landlord = {
+                    uid: user.uid,
+                    email: user.email || null,
+                    fullName: user.displayName || '',
+                    firstName: user.displayName?.split(' ')[0] || '',
+                    lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+                    photoURL: user.photoURL || undefined,
+                    phone: user.phoneNumber || '',
+                    createdAt: new Date().toISOString(),
+                    landlordId: user.uid,
+                    isActive: true
+                }
+
+                await setDoc(doc(db, 'landlords', user.uid), newLandlord)
+                userData = newLandlord
+
+                toast.success('Account created successfully!')
+            } else {
+                userData = userDoc.data() as Landlord
+                toast.success('Login successful!')
+            }
+
+            const landlordIdToStore =
+                'landlordId' in userData && userData.landlordId != null
+                    ? String(userData.landlordId)
+                    : user.uid
+
+            // Store auth data
+            localStorage.setItem('authToken', token)
+            localStorage.setItem('landlordId', landlordIdToStore)
+            localStorage.setItem('user', JSON.stringify(userData))
+
+            router.push('/dashboard')
+
+        } catch (error: unknown) {
+            console.error('Google login error:', error)
+            toast.error('Failed to login with Google')
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     return (
-        <div className="min-h-screen bg-linear-to-b from-blue-50 to-white flex items-center justify-center p-4">
+        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
             <div className="w-full max-w-md">
                 {/* Logo */}
                 <Link href="/" className="flex items-center justify-center gap-2 mb-8">
@@ -52,7 +154,7 @@ export default function LoginPage() {
                             Sign in to your account to manage your properties
                         </CardDescription>
                     </CardHeader>
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleEmailLogin}>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
                                 <Label htmlFor="email">Email</Label>
@@ -106,6 +208,26 @@ export default function LoginPage() {
                                     Forgot password?
                                 </Link>
                             </div>
+
+                            <div className="relative">
+                                <div className="absolute inset-0 flex items-center">
+                                    <span className="w-full border-t" />
+                                </div>
+                                <div className="relative flex justify-center text-xs uppercase">
+                                    <span className="bg-white px-2 text-gray-500">Or continue with</span>
+                                </div>
+                            </div>
+
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full"
+                                onClick={handleGoogleLogin}
+                                disabled={isLoading}
+                            >
+                                <Chrome className="mr-2 h-4 w-4" />
+                                Google
+                            </Button>
                         </CardContent>
 
                         <CardFooter className="flex flex-col gap-4">
@@ -129,13 +251,6 @@ export default function LoginPage() {
                                     Start free trial
                                 </Link>
                             </p>
-
-                            {/* Demo credentials */}
-                            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                                <p className="text-xs text-gray-500 mb-2">Demo credentials:</p>
-                                <p className="text-xs text-gray-600">Email: demo@landlord254.com</p>
-                                <p className="text-xs text-gray-600">Password: demo123</p>
-                            </div>
                         </CardFooter>
                     </form>
                 </Card>

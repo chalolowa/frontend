@@ -1,34 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-    Settings as SettingsIcon,
     User,
     Bell,
-    CreditCard,
     MessageSquare,
-    Globe,
     Shield,
-    Smartphone,
-    Webhook,
-    Database,
-    Users,
-    Building2,
-    Mail,
-    Phone,
-    Key,
     Save,
     RefreshCw,
-    AlertCircle,
     CheckCircle2,
     XCircle,
     Eye,
     EyeOff,
-    Copy,
-    Zap,
-    Link as LinkIcon,
-    TestTube,
+    Key,
+    Mail,
+    Calendar,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,37 +31,111 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
-import {
-    Alert,
-    AlertDescription,
-    AlertTitle,
-} from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Progress } from '@/components/ui/progress'
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table'
+import { auth, db } from '@/lib/firebase'
+import { doc, getDoc, updateDoc } from 'firebase/firestore'
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { api } from '@/lib/api'
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@/components/ui/table";
+
+interface UserData {
+    uid: string
+    email: string
+    firstName: string
+    lastName: string
+    fullName: string
+    phone: string
+    company: string
+    photoURL?: string
+    createdAt: string
+    landlordId?: string
+    businessAddress?: string
+    taxId?: string
+    notificationSettings?: {
+        emailNotifications: boolean
+        smsNotifications: boolean
+        paymentReminders: boolean
+        leaseExpiryReminders: boolean
+        maintenanceAlerts: boolean
+        marketingEmails: boolean
+        weeklyReports: boolean
+        monthlyStatements: boolean
+    }
+    smsSettings?: {
+        paymentReminderTemplate: string
+        paymentConfirmationTemplate: string
+        overdueReminderTemplate: string
+        ussdCode: string
+        ussdType: string
+    }
+}
+
+type DashboardStats = {
+    properties?: { total?: number; total_units?: number }
+    tenants?: { active?: number }
+}
 
 export default function SettingsPage() {
+    const router = useRouter()
     const [isLoading, setIsLoading] = useState(true)
     const [activeTab, setActiveTab] = useState('profile')
+    const [userData, setUserData] = useState<UserData | null>(null)
+    const [stats, setStats] = useState<DashboardStats | null>(null)
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 800)
-        return () => clearTimeout(timer)
-    }, [])
+        const loadUserData = async () => {
+            try {
+                const user = auth.currentUser
+                if (!user) {
+                    router.push('/login')
+                    return
+                }
+
+                // Get user data from Firestore
+                const userDoc = await getDoc(doc(db, 'landlords', user.uid))
+
+                if (userDoc.exists()) {
+                    const data = userDoc.data() as UserData
+                    setUserData(data)
+                }
+
+                // Fetch dashboard stats from backend
+                try {
+                    const statsResponse = await api.get('/landlords/dashboard/stats')
+                    setStats(statsResponse.data)
+                } catch (error) {
+                    console.warn('Could not fetch stats:', error)
+                }
+
+            } catch (error) {
+                console.error('Error loading user data:', error)
+                toast.error('Failed to load settings')
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        loadUserData()
+    }, [router])
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+        )
+    }
+
+    if (!userData) {
+        return (
+            <div className="text-center py-12">
+                <p className="text-gray-500">User data not found</p>
+                <Button onClick={() => router.push('/')} className="mt-4">
+                    Go Home
+                </Button>
             </div>
         )
     }
@@ -109,17 +171,17 @@ export default function SettingsPage() {
 
                 {/* Profile Tab */}
                 <TabsContent value="profile">
-                    <ProfileSettings />
+                    <ProfileSettings userData={userData} stats={stats} />
                 </TabsContent>
 
                 {/* Notifications Tab */}
                 <TabsContent value="notifications">
-                    <NotificationSettings />
+                    <NotificationSettings userData={userData} />
                 </TabsContent>
 
                 {/* SMS & USSD Tab */}
                 <TabsContent value="sms">
-                    <SMSSettings />
+                    <SMSSettings userData={userData} />
                 </TabsContent>
 
                 {/* Security Tab */}
@@ -132,14 +194,73 @@ export default function SettingsPage() {
 }
 
 // Profile Settings Component
-function ProfileSettings() {
+function ProfileSettings({ userData, stats }: { userData: UserData; stats: DashboardStats | null }) {
     const [isSaving, setIsSaving] = useState(false)
+    const [localUserData, setUserData] = useState<UserData>(userData)
+    const [editedData, setEditedData] = useState({
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        phone: userData.phone || '',
+        company: userData.company || '',
+        businessAddress: userData.businessAddress || '',
+        taxId: userData.taxId || '',
+    })
+
+    const handleInputChange = (field: keyof typeof editedData, value: string) => {
+        setEditedData(prev => ({ ...prev, [field]: value }))
+    }
 
     const handleSave = async () => {
         setIsSaving(true)
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        toast.success('Profile updated successfully')
-        setIsSaving(false)
+
+        try {
+            const user = auth.currentUser
+            if (!user) {
+                console.error('Not authenticated')
+                return
+            }
+
+            // Update Firestore
+            const userRef = doc(db, 'landlords', user.uid)
+            await updateDoc(userRef, {
+                firstName: editedData.firstName,
+                lastName: editedData.lastName,
+                fullName: `${editedData.firstName} ${editedData.lastName}`,
+                phone: editedData.phone,
+                company: editedData.company,
+                businessAddress: editedData.businessAddress,
+                taxId: editedData.taxId,
+            })
+
+            // Update local storage and state
+            const updatedUser = {
+                ...localUserData,
+                ...editedData,
+                fullName: `${editedData.firstName} ${editedData.lastName}`
+            }
+            localStorage.setItem('user', JSON.stringify(updatedUser))
+            setUserData(updatedUser)
+
+            toast.success('Profile updated successfully')
+        } catch (error) {
+            console.error('Error updating profile:', error)
+            toast.error('Failed to update profile')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    const getInitials = () => {
+        return `${localUserData.firstName?.[0] || ''}${localUserData.lastName?.[0] || ''}`.toUpperCase()
+    }
+
+    const getProfileCompletion = () => {
+        let completed = 0
+        const fields = ['firstName', 'lastName', 'email', 'phone', 'company', 'businessAddress', 'taxId']
+        fields.forEach(field => {
+            if (localUserData[field as keyof UserData]) completed += 100 / fields.length
+        })
+        return Math.round(completed)
     }
 
     return (
@@ -155,8 +276,8 @@ function ProfileSettings() {
                 <CardContent className="space-y-4">
                     <div className="flex items-center gap-4 mb-6">
                         <Avatar className="h-20 w-20">
-                            <AvatarImage src="https://github.com/shadcn.png" />
-                            <AvatarFallback>JD</AvatarFallback>
+                            <AvatarImage src={userData.photoURL} />
+                            <AvatarFallback>{getInitials()}</AvatarFallback>
                         </Avatar>
                         <div className="space-y-2">
                             <Button variant="outline" size="sm">
@@ -171,37 +292,72 @@ function ProfileSettings() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="firstName">First Name</Label>
-                            <Input id="firstName" defaultValue="John" />
+                            <Input
+                                id="firstName"
+                                value={editedData.firstName}
+                                onChange={(e) => handleInputChange('firstName', e.target.value)}
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="lastName">Last Name</Label>
-                            <Input id="lastName" defaultValue="Doe" />
+                            <Input
+                                id="lastName"
+                                value={editedData.lastName}
+                                onChange={(e) => handleInputChange('lastName', e.target.value)}
+                            />
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="email">Email Address</Label>
-                        <Input id="email" type="email" defaultValue="john.doe@example.com" />
+                        <Input
+                            id="email"
+                            type="email"
+                            value={userData.email}
+                            disabled
+                            className="bg-gray-50"
+                        />
+                        <p className="text-xs text-gray-500">Email cannot be changed</p>
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="phone">Phone Number</Label>
-                        <Input id="phone" defaultValue="+254 712 345 678" />
+                        <Input
+                            id="phone"
+                            value={editedData.phone}
+                            onChange={(e) => handleInputChange('phone', e.target.value)}
+                            placeholder="+254 712 345 678"
+                        />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="company">Company/Business Name</Label>
-                        <Input id="company" defaultValue="Doe Properties Ltd" />
+                        <Input
+                            id="company"
+                            value={editedData.company}
+                            onChange={(e) => handleInputChange('company', e.target.value)}
+                            placeholder="Your property management company"
+                        />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="taxId">Tax ID / Business Registration</Label>
-                        <Input id="taxId" defaultValue="P0512345678" />
+                        <Input
+                            id="taxId"
+                            value={editedData.taxId}
+                            onChange={(e) => handleInputChange('taxId', e.target.value)}
+                            placeholder="P0512345678"
+                        />
                     </div>
 
                     <div className="space-y-2">
                         <Label htmlFor="address">Business Address</Label>
-                        <Input id="address" defaultValue="123 Business District, Nairobi" />
+                        <Input
+                            id="address"
+                            value={editedData.businessAddress}
+                            onChange={(e) => handleInputChange('businessAddress', e.target.value)}
+                            placeholder="123 Business District, Nairobi"
+                        />
                     </div>
                 </CardContent>
                 <CardFooter className="flex justify-end">
@@ -238,30 +394,35 @@ function ProfileSettings() {
 
                     <div>
                         <p className="text-sm text-gray-500">Member Since</p>
-                        <p className="font-medium">January 15, 2024</p>
+                        <p className="font-medium flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            {new Date(userData.createdAt).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })}
+                        </p>
                     </div>
 
                     <div>
                         <p className="text-sm text-gray-500">Properties</p>
-                        <p className="font-medium">5 Properties • 12 Units</p>
+                        <p className="font-medium">
+                            {stats?.properties?.total || 0} Properties • {stats?.properties?.total_units || 0} Units
+                        </p>
                     </div>
 
                     <div>
                         <p className="text-sm text-gray-500">Tenants</p>
-                        <p className="font-medium">8 Active Tenants</p>
+                        <p className="font-medium">{stats?.tenants?.active || 0} Active Tenants</p>
                     </div>
 
                     <Separator />
 
                     <div>
-                        <p className="text-sm text-gray-500 mb-2">Storage Used</p>
-                        <Progress value={45} className="h-2" />
-                        <p className="text-xs text-gray-500 mt-1">45% of 10GB used</p>
+                        <p className="text-sm text-gray-500 mb-2">Profile Completion</p>
+                        <Progress value={getProfileCompletion()} className="h-2" />
+                        <p className="text-xs text-gray-500 mt-1">{getProfileCompletion()}% complete</p>
                     </div>
-
-                    <Button variant="outline" className="w-full">
-                        Upgrade Plan
-                    </Button>
                 </CardContent>
             </Card>
         </div>
@@ -269,8 +430,9 @@ function ProfileSettings() {
 }
 
 // Notification Settings Component
-function NotificationSettings() {
-    const [settings, setSettings] = useState({
+function NotificationSettings({ userData }: { userData: UserData }) {
+    const [isSaving, setIsSaving] = useState(false)
+    const [settings, setSettings] = useState(userData.notificationSettings || {
         emailNotifications: true,
         smsNotifications: true,
         paymentReminders: true,
@@ -283,85 +445,108 @@ function NotificationSettings() {
 
     const handleToggle = (key: keyof typeof settings) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }))
-        toast.success('Notification preference updated')
+    }
+
+    const handleSave = async () => {
+        setIsSaving(true)
+
+        try {
+            const user = auth.currentUser
+            if (!user) throw new Error('Not authenticated')
+
+            // Update Firestore
+            const userRef = doc(db, 'landlords', user.uid)
+            await updateDoc(userRef, {
+                notificationSettings: settings
+            })
+
+            toast.success('Notification preferences updated')
+        } catch (error) {
+            console.error('Error saving notification settings:', error)
+            toast.error('Failed to save settings')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Notification Channels</CardTitle>
+                        <CardDescription>Choose how you want to receive notifications</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base">Email Notifications</Label>
+                                <p className="text-sm text-gray-500">Receive updates via email</p>
+                            </div>
+                            <Switch
+                                checked={settings.emailNotifications}
+                                onCheckedChange={() => handleToggle('emailNotifications')}
+                            />
+                        </div>
+
+                        <Separator />
+
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base">SMS Notifications</Label>
+                                <p className="text-sm text-gray-500">Get text messages for urgent alerts</p>
+                            </div>
+                            <Switch
+                                checked={settings.smsNotifications}
+                                onCheckedChange={() => handleToggle('smsNotifications')}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Alert Preferences</CardTitle>
+                        <CardDescription>Customize which alerts you receive</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base">Payment Reminders</Label>
+                                <p className="text-sm text-gray-500">Get notified when payments are due</p>
+                            </div>
+                            <Switch
+                                checked={settings.paymentReminders}
+                                onCheckedChange={() => handleToggle('paymentReminders')}
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base">Lease Expiry</Label>
+                                <p className="text-sm text-gray-500">Reminders for upcoming lease renewals</p>
+                            </div>
+                            <Switch
+                                checked={settings.leaseExpiryReminders}
+                                onCheckedChange={() => handleToggle('leaseExpiryReminders')}
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label className="text-base">Maintenance Alerts</Label>
+                                <p className="text-sm text-gray-500">Get notified about maintenance requests</p>
+                            </div>
+                            <Switch
+                                checked={settings.maintenanceAlerts}
+                                onCheckedChange={() => handleToggle('maintenanceAlerts')}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
             <Card>
-                <CardHeader>
-                    <CardTitle>Notification Channels</CardTitle>
-                    <CardDescription>Choose how you want to receive notifications</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">Email Notifications</Label>
-                            <p className="text-sm text-gray-500">Receive updates via email</p>
-                        </div>
-                        <Switch
-                            checked={settings.emailNotifications}
-                            onCheckedChange={() => handleToggle('emailNotifications')}
-                        />
-                    </div>
-
-                    <Separator />
-
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">SMS Notifications</Label>
-                            <p className="text-sm text-gray-500">Get text messages for urgent alerts</p>
-                        </div>
-                        <Switch
-                            checked={settings.smsNotifications}
-                            onCheckedChange={() => handleToggle('smsNotifications')}
-                        />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>Alert Preferences</CardTitle>
-                    <CardDescription>Customize which alerts you receive</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">Payment Reminders</Label>
-                            <p className="text-sm text-gray-500">Get notified when payments are due</p>
-                        </div>
-                        <Switch
-                            checked={settings.paymentReminders}
-                            onCheckedChange={() => handleToggle('paymentReminders')}
-                        />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">Lease Expiry</Label>
-                            <p className="text-sm text-gray-500">Reminders for upcoming lease renewals</p>
-                        </div>
-                        <Switch
-                            checked={settings.leaseExpiryReminders}
-                            onCheckedChange={() => handleToggle('leaseExpiryReminders')}
-                        />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-base">Maintenance Alerts</Label>
-                            <p className="text-sm text-gray-500">Get notified about maintenance requests</p>
-                        </div>
-                        <Switch
-                            checked={settings.maintenanceAlerts}
-                            onCheckedChange={() => handleToggle('maintenanceAlerts')}
-                        />
-                    </div>
-                </CardContent>
-            </Card>
-
-            <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle>Report Schedule</CardTitle>
                     <CardDescription>Configure automatic report generation</CardDescription>
@@ -404,21 +589,62 @@ function NotificationSettings() {
                         </Select>
                     </div>
                 </CardContent>
+                <CardFooter className="flex justify-end">
+                    <Button onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? (
+                            <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="h-4 w-4 mr-2" />
+                                Save Settings
+                            </>
+                        )}
+                    </Button>
+                </CardFooter>
             </Card>
         </div>
     )
 }
 
 // SMS & USSD Settings Component
-function SMSSettings() {
+function SMSSettings({ userData }: { userData: UserData }) {
     const [isSaving, setIsSaving] = useState(false)
     const [testNumber, setTestNumber] = useState('')
+    const [settings, setSettings] = useState(userData.smsSettings || {
+        paymentReminderTemplate: "Dear {tenant_name}, your rent of KES {amount} for {property_name} is due on {due_date}. Please make payment to avoid late fees. Dial *384*123456# to pay via M-Pesa.",
+        paymentConfirmationTemplate: "Thank you {tenant_name}! We've received your rent payment of KES {amount} for {property_name}. Receipt #{receipt_number} has been sent to your email.",
+        overdueReminderTemplate: "URGENT: {tenant_name}, your rent payment of KES {amount} for {property_name} is now {days_overdue} days overdue. Please pay immediately to avoid further action. Pay now: *384*123456#",
+        ussdCode: "*384*123456#",
+        ussdType: "basic",
+    })
+
+    const handleInputChange = (field: keyof typeof settings, value: string) => {
+        setSettings(prev => ({ ...prev, [field]: value }))
+    }
 
     const handleSave = async () => {
         setIsSaving(true)
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        toast.success('SMS settings updated successfully')
-        setIsSaving(false)
+
+        try {
+            const user = auth.currentUser
+            if (!user) throw new Error('Not authenticated')
+
+            // Update Firestore
+            const userRef = doc(db, 'landlords', user.uid)
+            await updateDoc(userRef, {
+                smsSettings: settings
+            })
+
+            toast.success('SMS settings updated successfully')
+        } catch (error) {
+            console.error('Error saving SMS settings:', error)
+            toast.error('Failed to save settings')
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     const handleTestSMS = () => {
@@ -426,7 +652,11 @@ function SMSSettings() {
             toast.error('Please enter a phone number')
             return
         }
-        toast.success(`Test SMS sent to ${testNumber}`)
+
+        // In production, this would call the backend to send a test SMS
+        toast.success(`Test SMS would be sent to ${testNumber}`, {
+            description: "In production, this would send a real SMS via Africa's Talking"
+        })
         setTestNumber('')
     }
 
@@ -445,7 +675,8 @@ function SMSSettings() {
                         <Label>Payment Reminder Template</Label>
                         <textarea
                             className="w-full min-h-[100px] p-3 border rounded-lg text-sm"
-                            defaultValue="Dear {tenant_name}, your rent of KES {amount} for {property_name} is due on {due_date}. Please make payment to avoid late fees. Reply with *182* to pay via M-Pesa."
+                            value={settings.paymentReminderTemplate}
+                            onChange={(e) => handleInputChange('paymentReminderTemplate', e.target.value)}
                         />
                         <p className="text-xs text-gray-500">
                             Available variables: {'{tenant_name}'}, {'{amount}'}, {'{due_date}'}, {'{property_name}'}, {'{balance}'}
@@ -456,7 +687,8 @@ function SMSSettings() {
                         <Label>Payment Confirmation Template</Label>
                         <textarea
                             className="w-full min-h-[100px] p-3 border rounded-lg text-sm"
-                            defaultValue="Thank you {tenant_name}! We've received your rent payment of KES {amount} for {property_name}. Receipt #{receipt_number} has been sent to your email."
+                            value={settings.paymentConfirmationTemplate}
+                            onChange={(e) => handleInputChange('paymentConfirmationTemplate', e.target.value)}
                         />
                     </div>
 
@@ -464,7 +696,8 @@ function SMSSettings() {
                         <Label>Overdue Reminder Template</Label>
                         <textarea
                             className="w-full min-h-[100px] p-3 border rounded-lg text-sm"
-                            defaultValue="URGENT: {tenant_name}, your rent payment of KES {amount} for {property_name} is now {days_overdue} days overdue. Please pay immediately to avoid further action. Pay now: *384*123456#"
+                            value={settings.overdueReminderTemplate}
+                            onChange={(e) => handleInputChange('overdueReminderTemplate', e.target.value)}
                         />
                     </div>
                 </CardContent>
@@ -482,11 +715,19 @@ function SMSSettings() {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="ussdCode">USSD Short Code</Label>
-                            <Input id="ussdCode" placeholder="*384*123456#" defaultValue="*384*123456#" />
+                            <Input
+                                id="ussdCode"
+                                value={settings.ussdCode}
+                                onChange={(e) => handleInputChange('ussdCode', e.target.value)}
+                                placeholder="*384*123456#"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="ussdType">Service Type</Label>
-                            <Select defaultValue="basic">
+                            <Select
+                                value={settings.ussdType}
+                                onValueChange={(value) => handleInputChange('ussdType', value)}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select type" />
                                 </SelectTrigger>
@@ -501,7 +742,7 @@ function SMSSettings() {
                     <div className="space-y-2">
                         <Label>USSD Menu Structure</Label>
                         <div className="bg-gray-50 p-4 rounded-lg font-mono text-sm">
-                            <p>CON Welcome to RentFlow</p>
+                            <p>CON Welcome to Landlord254</p>
                             <p>1. Check Balance</p>
                             <p>2. Make Payment</p>
                             <p>3. View Due Date</p>
@@ -554,43 +795,68 @@ function SMSSettings() {
 }
 
 // Security Settings Component
-function SecuritySettings() {
+function SecuritySettings(): React.ReactNode {
     const [showCurrentPassword, setShowCurrentPassword] = useState(false)
     const [showNewPassword, setShowNewPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [isChangingPassword, setIsChangingPassword] = useState(false)
     const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
+    const [passwords, setPasswords] = useState({
+        current: '',
+        new: '',
+        confirm: ''
+    })
 
-    const handleChangePassword = async () => {
-        setIsChangingPassword(true)
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        toast.success('Password changed successfully')
-        setIsChangingPassword(false)
+    const handlePasswordChange = (field: keyof typeof passwords, value: string) => {
+        setPasswords(prev => ({ ...prev, [field]: value }))
     }
 
-    const sessions = [
-        {
-            device: 'Chrome on MacBook Pro',
-            location: 'Nairobi, Kenya',
-            ip: '192.168.1.100',
-            lastActive: 'Now',
-            current: true,
-        },
-        {
-            device: 'Safari on iPhone',
-            location: 'Mombasa, Kenya',
-            ip: '192.168.1.101',
-            lastActive: '2 hours ago',
-            current: false,
-        },
-        {
-            device: 'Firefox on Windows',
-            location: 'Kisumu, Kenya',
-            ip: '192.168.1.102',
-            lastActive: '2 days ago',
-            current: false,
-        },
-    ]
+    const handleChangePassword = async () => {
+        if (passwords.new !== passwords.confirm) {
+            toast.error('New passwords do not match')
+            return
+        }
+
+        if (passwords.new.length < 8) {
+            toast.error('Password must be at least 8 characters')
+            return
+        }
+
+        setIsChangingPassword(true)
+
+        try {
+            const user = auth.currentUser
+            if (!user || !user.email) throw new Error('Not authenticated')
+
+            // Re-authenticate user
+            const credential = EmailAuthProvider.credential(user.email, passwords.current)
+            await reauthenticateWithCredential(user, credential)
+
+            // Update password
+            await updatePassword(user, passwords.new)
+
+            toast.success('Password changed successfully')
+            setPasswords({ current: '', new: '', confirm: '' })
+
+        } catch (error) {
+            console.error('Error changing password:', error)
+
+            toast.error('Failed to reset password!')
+        } finally {
+            setIsChangingPassword(false)
+        }
+    }
+
+    const passwordStrength = () => {
+        const password = passwords.new
+        if (!password) return 0
+        let strength = 0
+        if (password.length >= 8) strength += 25
+        if (/[A-Z]/.test(password)) strength += 25
+        if (/[0-9]/.test(password)) strength += 25
+        if (/[^A-Za-z0-9]/.test(password)) strength += 25
+        return strength
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -609,6 +875,8 @@ function SecuritySettings() {
                             <Input
                                 id="currentPassword"
                                 type={showCurrentPassword ? "text" : "password"}
+                                value={passwords.current}
+                                onChange={(e) => handlePasswordChange('current', e.target.value)}
                             />
                             <Button
                                 variant="ghost"
@@ -627,6 +895,8 @@ function SecuritySettings() {
                             <Input
                                 id="newPassword"
                                 type={showNewPassword ? "text" : "password"}
+                                value={passwords.new}
+                                onChange={(e) => handlePasswordChange('new', e.target.value)}
                             />
                             <Button
                                 variant="ghost"
@@ -645,6 +915,8 @@ function SecuritySettings() {
                             <Input
                                 id="confirmPassword"
                                 type={showConfirmPassword ? "text" : "password"}
+                                value={passwords.confirm}
+                                onChange={(e) => handlePasswordChange('confirm', e.target.value)}
                             />
                             <Button
                                 variant="ghost"
@@ -657,30 +929,53 @@ function SecuritySettings() {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <p className="text-sm font-medium">Password Requirements:</p>
-                        <ul className="text-sm text-gray-500 space-y-1">
-                            <li className="flex items-center gap-2">
-                                <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                At least 8 characters
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <CheckCircle2 className="h-3 w-3 text-green-500" />
-                                Contains uppercase and lowercase letters
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <XCircle className="h-3 w-3 text-red-500" />
-                                Contains at least one number
-                            </li>
-                            <li className="flex items-center gap-2">
-                                <XCircle className="h-3 w-3 text-red-500" />
-                                Contains at least one special character
-                            </li>
-                        </ul>
-                    </div>
+                    {passwords.new && (
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium">Password Strength: {
+                                passwordStrength() <= 25 ? 'Weak' :
+                                    passwordStrength() <= 50 ? 'Fair' :
+                                        passwordStrength() <= 75 ? 'Good' : 'Strong'
+                            }</p>
+                            <Progress value={passwordStrength()} className="h-2" />
+
+                            <ul className="text-sm text-gray-500 space-y-1 mt-2">
+                                <li className="flex items-center gap-2">
+                                    {passwords.new.length >= 8 ?
+                                        <CheckCircle2 className="h-3 w-3 text-green-500" /> :
+                                        <XCircle className="h-3 w-3 text-red-500" />
+                                    }
+                                    At least 8 characters
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    {/[A-Z]/.test(passwords.new) ?
+                                        <CheckCircle2 className="h-3 w-3 text-green-500" /> :
+                                        <XCircle className="h-3 w-3 text-red-500" />
+                                    }
+                                    Contains uppercase letter
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    {/[0-9]/.test(passwords.new) ?
+                                        <CheckCircle2 className="h-3 w-3 text-green-500" /> :
+                                        <XCircle className="h-3 w-3 text-red-500" />
+                                    }
+                                    Contains number
+                                </li>
+                                <li className="flex items-center gap-2">
+                                    {/[^A-Za-z0-9]/.test(passwords.new) ?
+                                        <CheckCircle2 className="h-3 w-3 text-green-500" /> :
+                                        <XCircle className="h-3 w-3 text-red-500" />
+                                    }
+                                    Contains special character
+                                </li>
+                            </ul>
+                        </div>
+                    )}
                 </CardContent>
                 <CardFooter>
-                    <Button onClick={handleChangePassword} disabled={isChangingPassword}>
+                    <Button
+                        onClick={handleChangePassword}
+                        disabled={isChangingPassword || !passwords.current || !passwords.new || !passwords.confirm}
+                    >
                         {isChangingPassword ? (
                             <>
                                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -732,43 +1027,7 @@ function SecuritySettings() {
                 </CardContent>
             </Card>
 
-            {/* Active Sessions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Active Sessions</CardTitle>
-                    <CardDescription>
-                        Devices currently logged into your account
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    {sessions.map((session, index) => (
-                        <div key={index} className="flex items-start justify-between">
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2">
-                                    <p className="font-medium text-sm">{session.device}</p>
-                                    {session.current && (
-                                        <Badge className="bg-green-100 text-green-800 text-xs">Current</Badge>
-                                    )}
-                                </div>
-                                <p className="text-xs text-gray-500">{session.location} • {session.ip}</p>
-                                <p className="text-xs text-gray-400">Last active: {session.lastActive}</p>
-                            </div>
-                            {!session.current && (
-                                <Button variant="ghost" size="sm" className="text-red-600">
-                                    Revoke
-                                </Button>
-                            )}
-                        </div>
-                    ))}
-                </CardContent>
-                <CardFooter>
-                    <Button variant="outline" className="w-full">
-                        Sign Out All Other Devices
-                    </Button>
-                </CardFooter>
-            </Card>
-
-            {/* Login History */}
+            {/* Recent Login Activity */}
             <Card className="lg:col-span-2">
                 <CardHeader>
                     <CardTitle>Recent Login Activity</CardTitle>
@@ -789,34 +1048,19 @@ function SecuritySettings() {
                         </TableHeader>
                         <TableBody>
                             <TableRow>
-                                <TableCell>2024-02-01 09:30 AM</TableCell>
-                                <TableCell>Chrome on MacBook Pro</TableCell>
-                                <TableCell>Nairobi, Kenya</TableCell>
-                                <TableCell>192.168.1.100</TableCell>
+                                <TableCell>{new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</TableCell>
+                                <TableCell>Current Session</TableCell>
+                                <TableCell>Loading...</TableCell>
+                                <TableCell>-</TableCell>
                                 <TableCell>
-                                    <Badge className="bg-green-100 text-green-800">Successful</Badge>
-                                </TableCell>
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>2024-01-31 08:15 PM</TableCell>
-                                <TableCell>Safari on iPhone</TableCell>
-                                <TableCell>Mombasa, Kenya</TableCell>
-                                <TableCell>192.168.1.101</TableCell>
-                                <TableCell>
-                                    <Badge className="bg-green-100 text-green-800">Successful</Badge>
-                                </TableCell>
-                            </TableRow>
-                            <TableRow>
-                                <TableCell>2024-01-30 11:45 AM</TableCell>
-                                <TableCell>Firefox on Windows</TableCell>
-                                <TableCell>Unknown Location</TableCell>
-                                <TableCell>203.45.67.89</TableCell>
-                                <TableCell>
-                                    <Badge className="bg-red-100 text-red-800">Failed Attempt</Badge>
+                                    <Badge className="bg-green-100 text-green-800">Active</Badge>
                                 </TableCell>
                             </TableRow>
                         </TableBody>
                     </Table>
+                    <p className="text-sm text-gray-500 mt-4">
+                        Login history is available in Firebase Console
+                    </p>
                 </CardContent>
             </Card>
         </div>

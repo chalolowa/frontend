@@ -4,13 +4,18 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Home, Mail, Lock, User, Phone, Building2, Eye, EyeOff, ArrowRight, CheckCircle } from 'lucide-react'
+import { Home, Mail, Lock, User, Phone, Building2, Eye, EyeOff, ArrowRight, CheckCircle, Chrome } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
+import { createUserWithEmailAndPassword, signInWithPopup } from 'firebase/auth'
+import { auth, googleProvider, db } from '@/lib/firebase'
+import { doc, setDoc } from 'firebase/firestore'
+import { api } from '@/lib/api'
+import type { Landlord } from '@/types/landlord'
 
 export default function SignupPage() {
     const router = useRouter()
@@ -47,7 +52,41 @@ export default function SignupPage() {
         setStep(1)
     }
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const createLandlordInBackend = async (uid: string, token: string, userData: Landlord) => {
+        try {
+            // Register with FastAPI backend
+            const response = await api.post('/landlords/register', {
+                email: userData.email,
+                username: (userData.email || '').split('@')[0],
+                full_name: `${userData.firstName} ${userData.lastName}`,
+                phone: userData.phone || '',
+                company_name: userData.company || '',
+                password: 'firebase-auth', // Backend expects password but we'll use Firebase
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+
+            if (response.data && response.data.id) {
+                // Update Firestore with backend landlord ID
+                await setDoc(doc(db, 'landlords', uid), {
+                    ...userData,
+                    landlordId: response.data.id,
+                    syncedWithBackend: true
+                }, { merge: true })
+                
+                return response.data.id
+            }
+        } catch (error) {
+            console.warn('Backend sync failed, continuing with Firebase only:', error)
+            return uid
+        }
+        
+        return uid
+    }
+
+    const handleEmailSignup = async (e: React.FormEvent) => {
         e.preventDefault()
 
         if (step === 1) {
@@ -67,15 +106,105 @@ export default function SignupPage() {
 
         setIsLoading(true)
 
-        // Simulate signup
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        try {
+            // Create user in Firebase
+            const userCredential = await createUserWithEmailAndPassword(
+                auth, 
+                formData.email, 
+                formData.password
+            )
+            const user = userCredential.user
+            
+            // Get Firebase token
+            const token = await user.getIdToken()
+            
+            // Prepare user data for Firestore
+            const userData = {
+                uid: user.uid,
+                email: user.email,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                fullName: `${formData.firstName} ${formData.lastName}`,
+                phone: formData.phone,
+                company: formData.company,
+                createdAt: new Date().toISOString(),
+                isActive: true
+            }
+            
+            // Store in Firestore
+            await setDoc(doc(db, 'landlords', user.uid), userData)
+            
+            // Sync with backend
+            const landlordId = await createLandlordInBackend(user.uid, token, {
+                ...userData,
+                landlordId: user.uid
+            })
+            
+            // Store auth data
+            localStorage.setItem('authToken', token)
+            localStorage.setItem('landlordId', landlordId)
+            localStorage.setItem('user', JSON.stringify(userData))
 
-        toast.success('Account created successfully!', {
-            description: 'Welcome to Landlord254. Check your email to verify your account.'
-        })
+            toast.success('Account created successfully!', {
+                description: 'Welcome to Landlord254.'
+            })
 
-        setIsLoading(false)
-        router.push('/dashboard')
+            router.push('/dashboard')
+            
+        } catch (error: unknown) {
+            console.error('Signup error:', error)    
+            toast.error('Account creation failed... please try again!')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleGoogleSignup = async () => {
+        setIsLoading(true)
+        
+        try {
+            // Sign in with Google
+            const result = await signInWithPopup(auth, googleProvider)
+            const user = result.user
+            
+            // Get Firebase token
+            const token = await user.getIdToken()
+            
+            // Prepare user data
+            const nameParts = user.displayName?.split(' ') || ['', '']
+            const userData = {
+                uid: user.uid,
+                email: user.email,
+                firstName: nameParts[0] || '',
+                lastName: nameParts.slice(1).join(' ') || '',
+                fullName: user.displayName || '',
+                photoURL: user.photoURL ?? undefined,
+                phone: user.phoneNumber || '',
+                company: '',
+                createdAt: new Date().toISOString(),
+                isActive: true
+            }
+            
+            // Store in Firestore
+            await setDoc(doc(db, 'landlords', user.uid), userData)
+            
+            // Sync with backend
+            const landlordId = await createLandlordInBackend(user.uid, token, userData)
+            
+            // Store auth data
+            localStorage.setItem('authToken', token)
+            localStorage.setItem('landlordId', landlordId)
+            localStorage.setItem('user', JSON.stringify(userData))
+            
+            toast.success('Account created successfully!')
+            router.push('/dashboard')
+            
+        } catch (error: unknown) {
+            console.error('Google signup error:', error)
+            toast.error('Failed to sign up with Google')
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     const passwordStrength = () => {
@@ -90,7 +219,7 @@ export default function SignupPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center p-4">
+        <div className="min-h-screen bg-linear-to-b from-blue-50 to-white flex items-center justify-center p-4">
             <div className="w-full max-w-md">
                 {/* Logo */}
                 <Link href="/" className="flex items-center justify-center gap-2 mb-8">
@@ -120,7 +249,7 @@ export default function SignupPage() {
                         </CardDescription>
                     </CardHeader>
 
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleEmailSignup}>
                         <CardContent className="space-y-4">
                             {step === 1 ? (
                                 <>
@@ -194,6 +323,26 @@ export default function SignupPage() {
                                             />
                                         </div>
                                     </div>
+
+                                    <div className="relative">
+                                        <div className="absolute inset-0 flex items-center">
+                                            <span className="w-full border-t" />
+                                        </div>
+                                        <div className="relative flex justify-center text-xs uppercase">
+                                            <span className="bg-white px-2 text-gray-500">Or</span>
+                                        </div>
+                                    </div>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={handleGoogleSignup}
+                                        disabled={isLoading}
+                                    >
+                                        <Chrome className="mr-2 h-4 w-4" />
+                                        Sign up with Google
+                                    </Button>
                                 </>
                             ) : (
                                 <>

@@ -8,15 +8,9 @@ import {
   MessageSquare,
   Smartphone,
   Zap,
-  Shield,
   TrendingUp,
-  Clock,
   CheckCircle,
   ArrowRight,
-  Star,
-  Phone,
-  Mail,
-  MapPin,
   Facebook,
   Twitter,
   Linkedin,
@@ -51,7 +45,7 @@ export default function LandingPage() {
         </nav>
 
         {/* Hero Section */}
-        <section className="pt-24 pb-16 md:pt-32 md:pb-24 bg-gradient-to-b from-blue-50 to-white">
+        <section className="pt-24 pb-16 md:pt-32 md:pb-24 bg-linear-to-b from-blue-50 to-white">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div>
@@ -230,13 +224,13 @@ export default function LandingPage() {
               <div>
                 <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-800 px-4 py-2 rounded-full mb-6">
                   <Smartphone className="h-4 w-4" />
-                  <span className="text-sm font-medium">Africa's Talking Integration</span>
+                  <span className="text-sm font-medium">Africa&apos;s Talking Integration</span>
                 </div>
                 <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
                   Reach tenants anywhere, even without smartphones
                 </h2>
                 <p className="text-lg text-gray-600 mt-4">
-                  Our integration with Africa's Talking enables SMS reminders and USSD payments
+                  Our integration with Africa&apos;s Talking enables SMS reminders and USSD payments
                   that work on any mobile phone. No app downloads required.
                 </p>
                 <div className="mt-6 space-y-4">
@@ -263,7 +257,7 @@ export default function LandingPage() {
                   </div>
                 </div>
               </div>
-              <div className="bg-gradient-to-br from-purple-50 to-blue-50 p-8 rounded-2xl">
+              <div className="bg-linear-to-br from-purple-50 to-blue-50 p-8 rounded-2xl">
                 <div className="max-w-sm mx-auto">
                   <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
                     <div className="flex items-center gap-3 mb-3">
@@ -271,7 +265,7 @@ export default function LandingPage() {
                       <span className="text-sm font-medium">SMS Reminder</span>
                     </div>
                     <p className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
-                      "Dear John, your rent of KES 15,000 is due in 3 days. Pay via *384*123456#"
+                      &quot;Dear John, your rent of KES 15,000 is due in 3 days. Pay via *384*123456#&quot;
                     </p>
                   </div>
                   <div className="bg-white rounded-lg shadow-lg p-4">
@@ -299,7 +293,7 @@ export default function LandingPage() {
               Ready to Simplify Your Property Management?
             </h2>
             <p className="text-lg text-blue-100 mb-8 max-w-2xl mx-auto">
-              Join thousands of landlords who&#39;ve automated their rent collection and saved countless hours.
+              Join thousands of landlords who&apos;ve automated their rent collection and saved countless hours.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/signup">
@@ -390,7 +384,7 @@ export default function LandingPage() {
 }
 
 // Feature Card Component
-function FeatureCard({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+function FeatureCard({ icon: Icon, title, description }: { icon: React.ComponentType<{ className?: string }>; title: string; description: string }) {
   return (
       <div className="bg-white p-6 rounded-xl border hover:shadow-lg transition-shadow">
         <div className="h-12 w-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4">

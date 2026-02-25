@@ -13,7 +13,7 @@ interface PropertyCardProps {
         occupied: number
         monthlyRent: number
         nextPayment: string
-        status: 'paid' | 'partial' | 'overdue'
+        status: 'paid' | 'partial' | 'overdue' | 'vacant'
     }
     onSendReminder: () => void
 }
@@ -33,6 +33,7 @@ export function PropertyCard({ property, onSendReminder }: PropertyCardProps) {
             case 'paid': return 'All Paid'
             case 'partial': return 'Partial Payment'
             case 'overdue': return 'Overdue'
+            case 'vacant': return 'Vacant'
             default: return status
         }
     }
