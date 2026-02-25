@@ -52,19 +52,34 @@ export default function LoginPage() {
 
             const userData = userDoc.data()
 
-            // Store auth data
+            // Store auth token locally
             localStorage.setItem('authToken', token)
-            localStorage.setItem('landlordId', userData.landlordId?.toString() || user.uid)
             localStorage.setItem('user', JSON.stringify(userData))
+
+            // Register / fetch landlord record from backend so we have an integer id
+            try {
+                const resp = await api.post('/landlords', {
+                    auth_provider_id: user.uid,
+                    email: user.email,
+                    full_name: user.displayName || '',
+                    phone: user.phoneNumber || ''
+                })
+                const backendLandlord = resp.data
+                localStorage.setItem('landlordId', String(backendLandlord.id))
+            } catch (err) {
+                console.warn('failed to sync landlord with backend', err)
+                // If backend fails we still store uid as fallback but many
+                // endpoints will then reject until a real id is provided.
+                localStorage.setItem('landlordId', userData.landlordId?.toString() || user.uid)
+            }
 
             toast.success('Login successful!')
 
-            // Verify backend connection
+            // Optionally verify we can fetch stats now that landlordId is stored
             try {
                 await api.get('/landlords/dashboard/stats')
             } catch (error) {
-                console.warn('Backend not reachable, but continuing with local auth');
-                console.error(error);
+                console.warn('Backend not reachable after register', error);
             }
 
             router.push('/dashboard')
@@ -123,10 +138,24 @@ export default function LoginPage() {
                     ? String(userData.landlordId)
                     : user.uid
 
-            // Store auth data
+            // Store auth token and frontend user information
             localStorage.setItem('authToken', token)
-            localStorage.setItem('landlordId', landlordIdToStore)
             localStorage.setItem('user', JSON.stringify(userData))
+
+            // Sync landlord record with backend
+            try {
+                const resp = await api.post('/landlords', {
+                    auth_provider_id: user.uid,
+                    email: user.email,
+                    full_name: user.displayName || '',
+                    phone: user.phoneNumber || ''
+                })
+                const backendLandlord = resp.data
+                localStorage.setItem('landlordId', String(backendLandlord.id))
+            } catch (err) {
+                console.warn('failed to sync landlord with backend', err)
+                localStorage.setItem('landlordId', landlordIdToStore)
+            }
 
             router.push('/dashboard')
 

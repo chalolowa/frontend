@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { api } from '@/lib/api'
 import {
     Building2,
     Plus,
@@ -14,20 +15,16 @@ import {
     Calendar,
     MoreVertical,
     Download,
-    Mail,
-    Phone,
-    AlertCircle
+    Mail
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -39,70 +36,53 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Property } from '@/types/property'
 
-// Mock data
-const mockProperties: Property[] = [
-    {
-        id: '1',
-        name: 'Sunset Apartments',
-        address: '123 Main St, Nairobi',
-        units: [
-            { id: '101', number: 'A1', type: '2 Bedroom', rent: 1500, status: 'occupied', tenantId: 't1' },
-            { id: '102', number: 'A2', type: '1 Bedroom', rent: 1200, status: 'occupied', tenantId: 't2' },
-            { id: '103', number: 'A3', type: 'Studio', rent: 900, status: 'vacant' },
-        ],
-        totalUnits: 3,
-        occupiedUnits: 2,
-        monthlyRevenue: 2700,
-        nextPayment: '2024-02-01',
-        status: 'active',
-        image: '/properties/sunset.jpg',
-    },
-    {
-        id: '2',
-        name: 'Green Heights',
-        address: '456 Park Ave, Mombasa',
-        units: [
-            { id: '201', number: 'B1', type: '3 Bedroom', rent: 2000, status: 'occupied', tenantId: 't3' },
-            { id: '202', number: 'B2', type: '2 Bedroom', rent: 1600, status: 'occupied', tenantId: 't4' },
-        ],
-        totalUnits: 2,
-        occupiedUnits: 2,
-        monthlyRevenue: 3600,
-        nextPayment: '2024-02-05',
-        status: 'active',
-        image: '/properties/green.jpg',
-    },
-    {
-        id: '3',
-        name: 'City View Plaza',
-        address: '789 River Rd, Kisumu',
-        units: [
-            { id: '301', number: 'C1', type: '2 Bedroom', rent: 1400, status: 'occupied', tenantId: 't5' },
-            { id: '302', number: 'C2', type: '2 Bedroom', rent: 1400, status: 'occupied', tenantId: 't6' },
-            { id: '303', number: 'C3', type: '1 Bedroom', rent: 1100, status: 'occupied', tenantId: 't7' },
-            { id: '304', number: 'C4', type: 'Studio', rent: 850, status: 'vacant' },
-        ],
-        totalUnits: 4,
-        occupiedUnits: 3,
-        monthlyRevenue: 3900,
-        nextPayment: '2024-01-30',
-        status: 'maintenance',
-    },
-]
+// state will be populated from backend instead of mock data
+type RawProperty = {
+    id: number
+    name: string
+    address: string
+    total_units: number
+    monthly_rent_total: number
+    is_active: boolean
+    occupied_units?: number
+    units?: unknown[]
+}
+
+
 
 export default function PropertiesPage() {
-    const [properties, setProperties] = useState<Property[]>(mockProperties)
+    const [properties, setProperties] = useState<Property[]>([])
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        // Simulate loading
-        const timer = setTimeout(() => setIsLoading(false), 1000)
-        return () => clearTimeout(timer)
+        const load = async () => {
+            try {
+                const res = await api.get<RawProperty[]>('/properties')
+                const mapped: Property[] = res.data.map(p => ({
+                    id: String(p.id),
+                    name: p.name,
+                    address: p.address,
+                    units: [], // frontend does not currently need full unit list
+                    totalUnits: p.total_units,
+                    occupiedUnits: p.occupied_units || 0,
+                    monthlyRevenue: p.monthly_rent_total,
+                    nextPayment: '',
+                    status: p.is_active ? 'active' : 'inactive',
+                    image: ''
+                }))
+                setProperties(mapped)
+            } catch (err) {
+                console.error('Failed to load properties', err)
+                toast.error('Unable to fetch properties')
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        load()
     }, [])
 
     const filteredProperties = properties.filter(property => {
@@ -119,11 +99,16 @@ export default function PropertiesPage() {
         totalRevenue: properties.reduce((acc, p) => acc + p.monthlyRevenue, 0),
     }
 
-    const handleSendBulkReminder = () => {
-        toast.success('Payment reminders sent to all tenants', {
-            description: 'SMS notifications will be delivered shortly',
-        })
+    const handleSendBulkReminder = async () => {
+        try {
+            const res = await api.post('/payments/remind/all-overdue')
+            toast.success(`Reminders queued: ${res.data.count}`)
+        } catch (err) {
+            console.error('bulk reminder failed', err)
+            toast.error('Failed to send reminders')
+        }
     }
+
 
     const handleExportData = () => {
         toast.info('Exporting property data...')

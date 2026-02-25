@@ -54,18 +54,13 @@ export default function SignupPage() {
 
     const createLandlordInBackend = async (uid: string, token: string, userData: Landlord) => {
         try {
-            // Register with FastAPI backend
-            const response = await api.post('/landlords/register', {
+            // Register with FastAPI backend - the API will create or return existing landlord.
+            const response = await api.post('/landlords', {
+                auth_provider_id: uid,
                 email: userData.email,
-                username: (userData.email || '').split('@')[0],
                 full_name: `${userData.firstName} ${userData.lastName}`,
                 phone: userData.phone || '',
-                company_name: userData.company || '',
-                password: 'firebase-auth', // Backend expects password but we'll use Firebase
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                company_name: userData.company || ''
             })
 
             if (response.data && response.data.id) {
@@ -75,14 +70,14 @@ export default function SignupPage() {
                     landlordId: response.data.id,
                     syncedWithBackend: true
                 }, { merge: true })
-                
+
                 return response.data.id
             }
         } catch (error) {
             console.warn('Backend sync failed, continuing with Firebase only:', error)
             return uid
         }
-        
+
         return uid
     }
 

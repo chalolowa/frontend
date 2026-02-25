@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { api } from '@/lib/api'
 import {
     Users,
     Plus,
@@ -40,130 +41,74 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tenant } from '@/types/tenant'
 
-// Mock data
-const mockTenants: Tenant[] = [
-    {
-        id: 't1',
-        name: 'John Mwangi',
-        email: 'john.mwangi@email.com',
-        phone: '+254 712 345 678',
-        propertyId: '1',
-        propertyName: 'Sunset Apartments',
-        unitNumber: 'A1',
-        rentAmount: 1500,
-        deposit: 1500,
-        leaseStart: '2024-01-01',
-        leaseEnd: '2024-12-31',
-        nextPayment: '2024-02-01',
-        paymentStatus: 'pending',
-        balance: 1500,
-        documents: [],
-        emergencyContact: {
-            name: 'Mary Mwangi',
-            phone: '+254 723 456 789',
-            relationship: 'Spouse'
-        }
-    },
-    {
-        id: 't2',
-        name: 'Sarah Wanjiku',
-        email: 'sarah.wanjiku@email.com',
-        phone: '+254 733 456 789',
-        propertyId: '1',
-        propertyName: 'Sunset Apartments',
-        unitNumber: 'A2',
-        rentAmount: 1200,
-        deposit: 1200,
-        leaseStart: '2024-01-15',
-        leaseEnd: '2024-12-15',
-        nextPayment: '2024-02-05',
-        paymentStatus: 'paid',
-        balance: 0,
-        documents: [],
-        emergencyContact: {
-            name: 'Peter Wanjiku',
-            phone: '+254 743 567 890',
-            relationship: 'Brother'
-        }
-    },
-    {
-        id: 't3',
-        name: 'David Omondi',
-        email: 'david.omondi@email.com',
-        phone: '+254 753 567 890',
-        propertyId: '2',
-        propertyName: 'Green Heights',
-        unitNumber: 'B1',
-        rentAmount: 2000,
-        deposit: 2000,
-        leaseStart: '2024-01-01',
-        leaseEnd: '2024-12-31',
-        nextPayment: '2024-01-30',
-        paymentStatus: 'overdue',
-        balance: 2000,
-        documents: [],
-        emergencyContact: {
-            name: 'James Omondi',
-            phone: '+254 763 678 901',
-            relationship: 'Father'
-        }
-    },
-    {
-        id: 't4',
-        name: 'Grace Akinyi',
-        email: 'grace.akinyi@email.com',
-        phone: '+254 773 678 901',
-        propertyId: '2',
-        propertyName: 'Green Heights',
-        unitNumber: 'B2',
-        rentAmount: 1600,
-        deposit: 1600,
-        leaseStart: '2024-02-01',
-        leaseEnd: '2025-01-31',
-        nextPayment: '2024-02-01',
-        paymentStatus: 'pending',
-        balance: 1600,
-        documents: [],
-        emergencyContact: {
-            name: 'Michael Akinyi',
-            phone: '+254 783 789 012',
-            relationship: 'Spouse'
-        }
-    },
-    {
-        id: 't5',
-        name: 'James Kariuki',
-        email: 'james.kariuki@email.com',
-        phone: '+254 793 789 012',
-        propertyId: '3',
-        propertyName: 'City View Plaza',
-        unitNumber: 'C1',
-        rentAmount: 1400,
-        deposit: 1400,
-        leaseStart: '2024-01-10',
-        leaseEnd: '2024-12-10',
-        nextPayment: '2024-02-10',
-        paymentStatus: 'paid',
-        balance: 0,
-        documents: [],
-        emergencyContact: {
-            name: 'Lucy Kariuki',
-            phone: '+254 703 890 123',
-            relationship: 'Spouse'
-        }
-    }
-]
+// data fetched from backend
+interface RawTenant {
+    id: number
+    first_name: string
+    last_name: string
+    email?: string
+    phone: string
+    property_id: number
+    property_name?: string
+    unit_number?: string
+    monthly_rent: number
+    deposit_paid?: boolean
+    lease_start: string
+    lease_end: string
+    payment_status: 'paid' | 'pending' | 'overdue'
+    balance: number
+    emergency_contact_name?: string
+    emergency_contact_phone?: string
+    emergency_contact_relationship?: string
+}
+
+const [rawTenants, setRawTenants] = useState<RawTenant[]>([])
 
 export default function TenantsPage() {
-    const [tenants, setTenants] = useState<Tenant[]>(mockTenants)
+    const [tenants, setTenants] = useState<Tenant[]>([])
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [propertyFilter, setPropertyFilter] = useState('all')
     const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1000)
-        return () => clearTimeout(timer)
+        const load = async () => {
+            try {
+                const res = await api.get<RawTenant[]>('/tenants')
+                setRawTenants(res.data)
+
+                // map to front-end Tenant type
+                const mapped: Tenant[] = res.data.map(t => ({
+                    id: String(t.id),
+                    name: `${t.first_name} ${t.last_name}`,
+                    email: t.email || '',
+                    phone: t.phone,
+                    propertyId: String(t.property_id),
+                    propertyName: t.property_name || '',
+                    unitNumber: t.unit_number || '',
+                    rentAmount: t.monthly_rent,
+                    deposit: 0,
+                    leaseStart: t.lease_start,
+                    leaseEnd: t.lease_end,
+                    nextPayment: '',
+                    paymentStatus: t.payment_status,
+                    balance: t.balance,
+                    documents: [],
+                    emergencyContact: {
+                        name: t.emergency_contact_name || '',
+                        phone: t.emergency_contact_phone || '',
+                        relationship: t.emergency_contact_relationship || ''
+                    }
+                }))
+                setTenants(mapped)
+            } catch (err) {
+                console.error('failed to load tenants', err)
+                toast.error('Could not fetch tenants')
+            } finally {
+                setIsLoading(false)
+            }
+        }
+        load()
     }, [])
 
     const filteredTenants = tenants.filter(tenant => {
@@ -189,17 +134,24 @@ export default function TenantsPage() {
             name: tenants.find(t => t.propertyId === id)?.propertyName
         }))
 
-    const handleSendReminder = (tenant: Tenant) => {
-        toast.success(`Reminder sent to ${tenant.name}`, {
-            description: `SMS notification for $${tenant.rentAmount} sent to ${tenant.phone}`,
-        })
+    const handleSendReminder = async (tenant: Tenant) => {
+        try {
+            await api.post(`/tenants/${tenant.id}/remind`)
+            toast.success(`Reminder queued for ${tenant.name}`)
+        } catch (err) {
+            console.error('reminder api error', err)
+            toast.error('Failed to send reminder')
+        }
     }
 
-    const handleSendBulkReminders = () => {
-        const overdueTenants = tenants.filter(t => t.paymentStatus === 'overdue')
-        toast.success(`Reminders sent to ${overdueTenants.length} tenants`, {
-            description: 'SMS notifications will be delivered shortly',
-        })
+    const handleSendBulkReminders = async () => {
+        try {
+            const res = await api.post('/payments/remind/all-overdue')
+            toast.success(`Reminders queued: ${res.data.count}`)
+        } catch (err) {
+            console.error('bulk reminder error', err)
+            toast.error('Failed to send reminders')
+        }
     }
 
     const handleExportData = () => {
