@@ -206,7 +206,7 @@ export default function TenantsPage() {
                         <div className="flex-1">
                             <h3 className="font-semibold text-red-800">Overdue Payments Alert</h3>
                             <p className="text-sm text-red-600">
-                                You have {stats.overduePayments} tenants with overdue payments totaling ${stats.overdueAmount}.
+                                You have {stats.overduePayments} tenants with overdue payments totaling KES{stats.overdueAmount}.
                             </p>
                         </div>
                         <Button
@@ -255,7 +255,7 @@ export default function TenantsPage() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Monthly Rent</p>
-                                <p className="text-2xl font-bold mt-1">${stats.monthlyRevenue.toLocaleString()}</p>
+                                <p className="text-2xl font-bold mt-1">KES{stats.monthlyRevenue.toLocaleString()}</p>
                             </div>
                             <div className="h-10 w-10 bg-purple-50 rounded-lg flex items-center justify-center">
                                 <DollarSign className="h-5 w-5 text-purple-600" />
@@ -269,7 +269,7 @@ export default function TenantsPage() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Overdue</p>
-                                <p className="text-2xl font-bold mt-1 text-red-600">${stats.overdueAmount.toLocaleString()}</p>
+                                <p className="text-2xl font-bold mt-1 text-red-600">KES{stats.overdueAmount.toLocaleString()}</p>
                             </div>
                             <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center">
                                 <AlertCircle className="h-5 w-5 text-red-600" />

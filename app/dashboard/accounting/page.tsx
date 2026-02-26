@@ -292,7 +292,7 @@ export default function AccountingPage() {
                             <div>
                                 <p className="text-sm text-gray-500">Total Income</p>
                                 <p className="text-2xl font-bold mt-1 text-green-600">
-                                    ${stats.totalIncome.toLocaleString()}
+                                    KES{stats.totalIncome.toLocaleString()}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">{stats.totalPayments} payments</p>
                             </div>
@@ -326,7 +326,7 @@ export default function AccountingPage() {
                             <div>
                                 <p className="text-sm text-gray-500">Overdue</p>
                                 <p className="text-2xl font-bold mt-1 text-red-600">
-                                    ${stats.overdueAmount.toLocaleString()}
+                                    KES{stats.overdueAmount.toLocaleString()}
                                 </p>
                                 <p className="text-xs text-gray-500 mt-1">{stats.overduePayments} payments</p>
                             </div>
@@ -402,7 +402,7 @@ export default function AccountingPage() {
                                         <TableRow key={payment.id}>
                                             <TableCell className="font-medium">{payment.tenantName}</TableCell>
                                             <TableCell>{payment.propertyName} - {payment.unitNumber}</TableCell>
-                                            <TableCell>${payment.amount}</TableCell>
+                                            <TableCell>KES{payment.amount}</TableCell>
                                             <TableCell>{new Date(payment.dueDate).toLocaleDateString()}</TableCell>
                                             <TableCell>
                                                 {payment.date ? new Date(payment.date).toLocaleDateString() : '-'}
@@ -472,11 +472,11 @@ export default function AccountingPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <p className="text-sm text-gray-500">Total Income</p>
-                                        <p className="text-2xl font-bold">${mockTaxSummary.totalIncome.toLocaleString()}</p>
+                                        <p className="text-2xl font-bold">KES{mockTaxSummary.totalIncome.toLocaleString()}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-500">Total Expenses</p>
-                                        <p className="text-2xl font-bold">${mockTaxSummary.totalExpenses.toLocaleString()}</p>
+                                        <p className="text-2xl font-bold">KES{mockTaxSummary.totalExpenses.toLocaleString()}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-gray-500">Net Income</p>
@@ -487,7 +487,7 @@ export default function AccountingPage() {
                                     <div>
                                         <p className="text-sm text-gray-500">Estimated Tax</p>
                                         <p className="text-2xl font-bold text-orange-600">
-                                            ${mockTaxSummary.estimatedTax.toLocaleString()}
+                                            KES{mockTaxSummary.estimatedTax.toLocaleString()}
                                         </p>
                                     </div>
                                 </div>
@@ -512,26 +512,26 @@ export default function AccountingPage() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
                                         <span className="text-sm">Maintenance</span>
-                                        <span className="font-medium">${mockTaxSummary.deductions.maintenance}</span>
+                                        <span className="font-medium">KES{mockTaxSummary.deductions.maintenance}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-sm">Insurance</span>
-                                        <span className="font-medium">${mockTaxSummary.deductions.insurance}</span>
+                                        <span className="font-medium">KES{mockTaxSummary.deductions.insurance}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-sm">Property Tax</span>
-                                        <span className="font-medium">${mockTaxSummary.deductions.propertyTax}</span>
+                                        <span className="font-medium">KES{mockTaxSummary.deductions.propertyTax}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-sm">Other</span>
-                                        <span className="font-medium">${mockTaxSummary.deductions.other}</span>
+                                        <span className="font-medium">KES{mockTaxSummary.deductions.other}</span>
                                     </div>
                                 </div>
 
                                 <div className="pt-4 border-t">
                                     <div className="flex justify-between font-medium">
                                         <span>Total Deductions</span>
-                                        <span>${mockTaxSummary.totalExpenses}</span>
+                                        <span>KES{mockTaxSummary.totalExpenses}</span>
                                     </div>
                                 </div>
                             </CardContent>

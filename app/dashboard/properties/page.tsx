@@ -194,7 +194,7 @@ export default function PropertiesPage() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Monthly Revenue</p>
-                                <p className="text-2xl font-bold mt-1">${stats.totalRevenue.toLocaleString()}</p>
+                                <p className="text-2xl font-bold mt-1">KES{stats.totalRevenue.toLocaleString()}</p>
                             </div>
                             <div className="h-10 w-10 bg-orange-50 rounded-lg flex items-center justify-center">
                                 <DollarSign className="h-5 w-5 text-orange-600" />
