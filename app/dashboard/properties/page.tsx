@@ -284,7 +284,7 @@ export default function PropertiesPage() {
                                             <DollarSign className="h-4 w-4 text-gray-400" />
                                             <div>
                                                 <p className="text-xs text-gray-500">Monthly Revenue</p>
-                                                <p className="font-medium">${property.monthlyRevenue.toLocaleString()}</p>
+                                                <p className="font-medium">KES{property.monthlyRevenue.toLocaleString()}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -313,7 +313,7 @@ export default function PropertiesPage() {
                                                         <span className="text-gray-500">({unit.type})</span>
                                                     </div>
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-medium">${unit.rent}</span>
+                                                        <span className="font-medium">KES{unit.rent}</span>
                                                         <Badge variant={unit.status === 'occupied' ? 'outline' : 'secondary'} className="text-xs">
                                                             {unit.status}
                                                         </Badge>
