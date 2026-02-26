@@ -62,8 +62,6 @@ interface RawTenant {
     emergency_contact_relationship?: string
 }
 
-const [rawTenants, setRawTenants] = useState<RawTenant[]>([])
-
 export default function TenantsPage() {
     const [tenants, setTenants] = useState<Tenant[]>([])
     const [searchTerm, setSearchTerm] = useState('')
@@ -75,7 +73,6 @@ export default function TenantsPage() {
         const load = async () => {
             try {
                 const res = await api.get<RawTenant[]>('/tenants')
-                setRawTenants(res.data)
 
                 // map to front-end Tenant type
                 const mapped: Tenant[] = res.data.map(t => ({

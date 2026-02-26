@@ -110,7 +110,7 @@ export default function AddPropertyPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="rent">Monthly Rent ($)</Label>
+                                <Label htmlFor="rent">Monthly Rent (KES)</Label>
                                 <Input
                                     id="rent"
                                     type="number"
