@@ -39,12 +39,12 @@ const routes = [
         href: '/dashboard/accounting',
         color: 'text-orange-500',
     },
-    {
+    /*{
         label: 'Messages',
         icon: MessageSquare,
         href: '/dashboard/messages',
         color: 'text-green-500',
-    },
+    },*/
 ]
 
 export function Sidebar() {

@@ -101,7 +101,7 @@ export function PropertyCard({ property, onSendReminder }: PropertyCardProps) {
                     variant="ghost"
                     size="sm"
                     className="w-full"
-                    onClick={onSendReminder}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSendReminder(); }}
                 >
                     Send Reminder
                 </Button>

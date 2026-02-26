@@ -133,7 +133,12 @@ export default function TenantsPage() {
 
     const handleSendReminder = async (tenant: Tenant) => {
         try {
-            await api.post(`/tenants/${tenant.id}/remind`)
+            const res = await api.post(`/tenants/${tenant.id}/remind`)
+            // backend now returns HTTP 502 on failure, but we'll also check
+            // the JSON body in case we continue to return 200 for any reason.
+            if (res.data && res.data.success === false) {
+                throw new Error(res.data.error || 'unknown')
+            }
             toast.success(`Reminder queued for ${tenant.name}`)
         } catch (err) {
             console.error('reminder api error', err)
@@ -372,7 +377,7 @@ export default function TenantsPage() {
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
                                                     <DropdownMenuItem>View Details</DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={() => handleSendReminder(tenant)}>
+                                                    <DropdownMenuItem onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSendReminder(tenant); }}>
                                                         Send Reminder
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem>Record Payment</DropdownMenuItem>
@@ -388,7 +393,7 @@ export default function TenantsPage() {
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t">
                                         <div>
                                             <p className="text-xs text-gray-500">Rent Amount</p>
-                                            <p className="font-medium">${tenant.rentAmount}/month</p>
+                                            <p className="font-medium">KES{tenant.rentAmount}/month</p>
                                         </div>
                                         <div>
                                             <p className="text-xs text-gray-500">Next Payment</p>
@@ -397,7 +402,7 @@ export default function TenantsPage() {
                                         <div>
                                             <p className="text-xs text-gray-500">Balance</p>
                                             <p className={`font-medium ${tenant.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                ${tenant.balance}
+                                                KES{tenant.balance}
                                             </p>
                                         </div>
                                         <div>
