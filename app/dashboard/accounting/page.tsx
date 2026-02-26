@@ -1,23 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
 import { toast } from 'sonner'
+import { api } from '@/lib/api'
 import {
     DollarSign,
     TrendingUp,
     TrendingDown,
     Calendar,
     Download,
-    Filter,
     Plus,
     Receipt,
-    FileText,
-    PieChart,
-    BarChart3,
-    CreditCard,
-    ArrowUpRight,
-    ArrowDownRight,
     Clock,
     CheckCircle,
     XCircle,
@@ -52,6 +45,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Progress } from '@/components/ui/progress'
 import { Payment, TaxSummary } from '@/types/payment'
+
+interface AccountingSummary {
+    total_collected?: number
+    pending_amount?: number
+    overdue_amount?: number
+    total_payments?: number
+    pending_payments?: number
+    overdue_payments?: number
+}
 
 // Mock data
 const mockPayments: Payment[] = [
@@ -111,7 +113,7 @@ const mockPayments: Payment[] = [
         date: '',
         dueDate: '2024-02-01',
         status: 'pending',
-        method: '',
+        method: 'Pending',
         reference: '',
         notes: 'New tenant'
     },
@@ -151,13 +153,54 @@ export default function AccountingPage() {
     const [payments, setPayments] = useState<Payment[]>(mockPayments)
     const [dateRange, setDateRange] = useState('this-month')
     const [isLoading, setIsLoading] = useState(true)
+    const [summary, setSummary] = useState<AccountingSummary | null>(null)
 
     useEffect(() => {
-        const timer = setTimeout(() => setIsLoading(false), 1000)
-        return () => clearTimeout(timer)
+        // Fetch accounting dashboard from the backend
+        const fetchDashboard = async () => {
+            try {
+                setIsLoading(true)
+                const res = await api.get('/accounting/dashboard')
+                const data = res.data
+
+                const mapped = (data.recent_payments || []).map((p: Record<string, unknown>) => ({
+                    id: String(p.id),
+                    tenantId: (p.tenant_id as string) || (p.tenantId as string) || '',
+                    tenantName: (p.tenant_name as string) || (p.tenantName as string) || 'Unknown',
+                    propertyId: p.property_id ? String(p.property_id) : ((p.propertyId as string) || ''),
+                    propertyName: (p.property_name as string) || (p.propertyName as string) || '-',
+                    unitNumber: (p.unit_number as string) || (p.unitNumber as string) || '-',
+                    amount: (p.amount as number) || 0,
+                    date: p.date ? new Date(p.date as string | number).toISOString() : (p.payment_date ? new Date(p.payment_date as string | number).toISOString() : ''),
+                    dueDate: p.due_date ? new Date(p.due_date as string | number).toISOString() : (p.dueDate ? new Date(p.dueDate as string | number).toISOString() : ''),
+                    status: ((p.status as string) || '').toLowerCase(),
+                    method: (p.payment_method as string) || (p.method as string) || '',
+                    reference: (p.transaction_id as string) || (p.reference as string) || '',
+                    notes: (p.notes as string) || ''
+                }))
+
+                setPayments(mapped.length ? mapped : mockPayments)
+                setSummary(data.summary || null)
+            } catch (err) {
+                console.error('Failed to load accounting dashboard', err)
+                toast.error('Failed to load accounting data')
+                setPayments(mockPayments)
+            } finally {
+                setIsLoading(false)
+            }
+        }
+
+        fetchDashboard()
     }, [])
 
-    const stats = {
+    const stats = summary ? {
+        totalIncome: summary.total_collected || 0,
+        pendingAmount: summary.pending_amount || 0,
+        overdueAmount: summary.overdue_amount || 0,
+        totalPayments: summary.total_payments || 0,
+        pendingPayments: summary.pending_payments || 0,
+        overduePayments: summary.overdue_payments || 0,
+    } : {
         totalIncome: payments.filter(p => p.status === 'completed').reduce((acc, p) => acc + p.amount, 0),
         pendingAmount: payments.filter(p => p.status === 'pending').reduce((acc, p) => acc + p.amount, 0),
         overdueAmount: payments.filter(p => p.status === 'overdue').reduce((acc, p) => acc + p.amount, 0),
@@ -178,7 +221,8 @@ export default function AccountingPage() {
         })
     }
 
-    const handlePrintReceipt = (payment: Payment) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handlePrintReceipt = (_payment: Payment) => {
         toast.info('Preparing receipt for printing...')
     }
 
@@ -313,7 +357,7 @@ export default function AccountingPage() {
 
             {/* Main Content Tabs */}
             <Tabs defaultValue="payments" className="space-y-4">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+                <TabsList className="grid w-full grid-cols-3 lg:w-100">
                     <TabsTrigger value="payments">Payments</TabsTrigger>
                     <TabsTrigger value="receipts">Receipts</TabsTrigger>
                     <TabsTrigger value="taxes">Tax Summary</TabsTrigger>
@@ -326,7 +370,7 @@ export default function AccountingPage() {
                             <div className="flex items-center justify-between">
                                 <CardTitle>Recent Payments</CardTitle>
                                 <Select value={dateRange} onValueChange={setDateRange}>
-                                    <SelectTrigger className="w-[180px]">
+                                    <SelectTrigger className="w-45">
                                         <Calendar className="h-4 w-4 mr-2" />
                                         <SelectValue placeholder="Date Range" />
                                     </SelectTrigger>
